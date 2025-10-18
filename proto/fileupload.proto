@@ -1,0 +1,36 @@
+syntax = "proto3";
+package pb;
+
+
+option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/pb";
+
+
+service FileUploadService {
+    rpc UploadFile(stream FileChunk) returns (UploadStatus);
+    rpc GetUploadedChunks(GetChunksRequest) returns (GetChunksResponse); // new method for resumable support
+}
+
+message FileChunk {
+    string file_id = 1;
+    string file_name = 2;
+    string user_id = 3; 
+    int64 chunk_index = 4;
+    int64 total_chunks = 5;
+    bytes content = 6;
+}
+
+
+
+message UploadStatus {
+    bool success = 1;
+    string message = 2;
+    string stored_path = 3;
+}
+
+message GetChunksRequest {
+    string file_id = 1;
+}
+
+message GetChunksResponse {
+    repeated int64 uploaded_chunks = 1;
+}

@@ -1,0 +1,13 @@
+upload-backend/
+├── cmd/
+│   └── server/
+│       └── main.go
+├── internal/
+│   └── upload/
+│       ├── handler.go
+│       ├── service.go
+│       └── model.go
+├── storage/
+│   └── temp/     # temporary chunks (local for now)
+├── go.mod
+└── go.sum
