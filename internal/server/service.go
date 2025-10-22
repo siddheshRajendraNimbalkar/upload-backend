@@ -168,3 +168,42 @@ func (s *UploadService) mergeChunks(fileID, fileName string) (string, error) {
 	fmt.Printf("🎉 Merged file saved at: %s\n", finalPath)
 	return finalPath, nil
 }
+
+func (s *UploadService) DownloadFile(req *pb.DownloadRequest, stream pb.FileUploadService_DownloadFileServer) error {
+	// Find file path from DB
+	upload, err := s.db.GetUploadByID(req.FileId)
+	if err != nil {
+		return status.Errorf(codes.NotFound, "file not found: %v", err)
+	}
+
+	filePath := upload.StoredPath
+	file, err := os.Open(filePath)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	buffer := make([]byte, 1024*64) // 64KB chunks
+	for {
+		n, err := file.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "read error: %v", err)
+		}
+
+		// Send chunk to client
+		chunk := &pb.FileChunk{
+			FileId:   req.FileId,
+			FileName: filepath.Base(filePath),
+			Content:  buffer[:n],
+		}
+		if err := stream.Send(chunk); err != nil {
+			return status.Errorf(codes.Internal, "stream send error: %v", err)
+		}
+	}
+
+	fmt.Printf("📤 File %s sent successfully.\n", filePath)
+	return nil
+}

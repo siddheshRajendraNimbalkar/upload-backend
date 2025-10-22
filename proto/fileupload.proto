@@ -1,25 +1,33 @@
 syntax = "proto3";
+
 package pb;
 
+option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/proto/pb";
 
-option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/pb";
-
+import "google/api/annotations.proto";
 
 service FileUploadService {
     rpc UploadFile(stream FileChunk) returns (UploadStatus);
-    rpc GetUploadedChunks(GetChunksRequest) returns (GetChunksResponse); // new method for resumable support
+    rpc GetUploadedChunks(GetChunksRequest) returns (GetChunksResponse);
+    rpc DownloadFile(DownloadRequest) returns (stream FileChunk) {
+        option (google.api.http) = {
+            get: "/v1/files/{file_id}"
+        };
+    }
 }
 
 message FileChunk {
     string file_id = 1;
     string file_name = 2;
-    string user_id = 3; 
+    string user_id = 3;
     int64 chunk_index = 4;
     int64 total_chunks = 5;
     bytes content = 6;
 }
 
-
+message DownloadRequest {
+    string file_id = 1;
+}
 
 message UploadStatus {
     bool success = 1;

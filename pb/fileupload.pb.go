@@ -7,6 +7,7 @@
 package pb
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -105,6 +106,50 @@ func (x *FileChunk) GetContent() []byte {
 	return nil
 }
 
+type DownloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FileId        string                 `protobuf:"bytes,1,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DownloadRequest) Reset() {
+	*x = DownloadRequest{}
+	mi := &file_proto_fileupload_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DownloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DownloadRequest) ProtoMessage() {}
+
+func (x *DownloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_fileupload_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DownloadRequest.ProtoReflect.Descriptor instead.
+func (*DownloadRequest) Descriptor() ([]byte, []int) {
+	return file_proto_fileupload_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DownloadRequest) GetFileId() string {
+	if x != nil {
+		return x.FileId
+	}
+	return ""
+}
+
 type UploadStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -116,7 +161,7 @@ type UploadStatus struct {
 
 func (x *UploadStatus) Reset() {
 	*x = UploadStatus{}
-	mi := &file_proto_fileupload_proto_msgTypes[1]
+	mi := &file_proto_fileupload_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -128,7 +173,7 @@ func (x *UploadStatus) String() string {
 func (*UploadStatus) ProtoMessage() {}
 
 func (x *UploadStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_fileupload_proto_msgTypes[1]
+	mi := &file_proto_fileupload_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -141,7 +186,7 @@ func (x *UploadStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadStatus.ProtoReflect.Descriptor instead.
 func (*UploadStatus) Descriptor() ([]byte, []int) {
-	return file_proto_fileupload_proto_rawDescGZIP(), []int{1}
+	return file_proto_fileupload_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *UploadStatus) GetSuccess() bool {
@@ -174,7 +219,7 @@ type GetChunksRequest struct {
 
 func (x *GetChunksRequest) Reset() {
 	*x = GetChunksRequest{}
-	mi := &file_proto_fileupload_proto_msgTypes[2]
+	mi := &file_proto_fileupload_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -186,7 +231,7 @@ func (x *GetChunksRequest) String() string {
 func (*GetChunksRequest) ProtoMessage() {}
 
 func (x *GetChunksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_fileupload_proto_msgTypes[2]
+	mi := &file_proto_fileupload_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -199,7 +244,7 @@ func (x *GetChunksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChunksRequest.ProtoReflect.Descriptor instead.
 func (*GetChunksRequest) Descriptor() ([]byte, []int) {
-	return file_proto_fileupload_proto_rawDescGZIP(), []int{2}
+	return file_proto_fileupload_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetChunksRequest) GetFileId() string {
@@ -218,7 +263,7 @@ type GetChunksResponse struct {
 
 func (x *GetChunksResponse) Reset() {
 	*x = GetChunksResponse{}
-	mi := &file_proto_fileupload_proto_msgTypes[3]
+	mi := &file_proto_fileupload_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +275,7 @@ func (x *GetChunksResponse) String() string {
 func (*GetChunksResponse) ProtoMessage() {}
 
 func (x *GetChunksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_fileupload_proto_msgTypes[3]
+	mi := &file_proto_fileupload_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +288,7 @@ func (x *GetChunksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChunksResponse.ProtoReflect.Descriptor instead.
 func (*GetChunksResponse) Descriptor() ([]byte, []int) {
-	return file_proto_fileupload_proto_rawDescGZIP(), []int{3}
+	return file_proto_fileupload_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetChunksResponse) GetUploadedChunks() []int64 {
@@ -257,7 +302,7 @@ var File_proto_fileupload_proto protoreflect.FileDescriptor
 
 const file_proto_fileupload_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/fileupload.proto\x12\x02pb\"\xb8\x01\n" +
+	"\x16proto/fileupload.proto\x12\x02pb\x1a\x1cgoogle/api/annotations.proto\"\xb8\x01\n" +
 	"\tFileChunk\x12\x17\n" +
 	"\afile_id\x18\x01 \x01(\tR\x06fileId\x12\x1b\n" +
 	"\tfile_name\x18\x02 \x01(\tR\bfileName\x12\x17\n" +
@@ -265,7 +310,9 @@ const file_proto_fileupload_proto_rawDesc = "" +
 	"\vchunk_index\x18\x04 \x01(\x03R\n" +
 	"chunkIndex\x12!\n" +
 	"\ftotal_chunks\x18\x05 \x01(\x03R\vtotalChunks\x12\x18\n" +
-	"\acontent\x18\x06 \x01(\fR\acontent\"c\n" +
+	"\acontent\x18\x06 \x01(\fR\acontent\"*\n" +
+	"\x0fDownloadRequest\x12\x17\n" +
+	"\afile_id\x18\x01 \x01(\tR\x06fileId\"c\n" +
 	"\fUploadStatus\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
@@ -274,11 +321,12 @@ const file_proto_fileupload_proto_rawDesc = "" +
 	"\x10GetChunksRequest\x12\x17\n" +
 	"\afile_id\x18\x01 \x01(\tR\x06fileId\"<\n" +
 	"\x11GetChunksResponse\x12'\n" +
-	"\x0fuploaded_chunks\x18\x01 \x03(\x03R\x0euploadedChunks2\x86\x01\n" +
+	"\x0fuploaded_chunks\x18\x01 \x03(\x03R\x0euploadedChunks2\xd9\x01\n" +
 	"\x11FileUploadService\x12/\n" +
 	"\n" +
 	"UploadFile\x12\r.pb.FileChunk\x1a\x10.pb.UploadStatus(\x01\x12@\n" +
-	"\x11GetUploadedChunks\x12\x14.pb.GetChunksRequest\x1a\x15.pb.GetChunksResponseB8Z6github.com/siddheshRajendraNimbalkar/upload-backend/pbb\x06proto3"
+	"\x11GetUploadedChunks\x12\x14.pb.GetChunksRequest\x1a\x15.pb.GetChunksResponse\x12Q\n" +
+	"\fDownloadFile\x12\x13.pb.DownloadRequest\x1a\r.pb.FileChunk\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/files/{file_id}0\x01B>Z<github.com/siddheshRajendraNimbalkar/upload-backend/proto/pbb\x06proto3"
 
 var (
 	file_proto_fileupload_proto_rawDescOnce sync.Once
@@ -292,20 +340,23 @@ func file_proto_fileupload_proto_rawDescGZIP() []byte {
 	return file_proto_fileupload_proto_rawDescData
 }
 
-var file_proto_fileupload_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_fileupload_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proto_fileupload_proto_goTypes = []any{
 	(*FileChunk)(nil),         // 0: pb.FileChunk
-	(*UploadStatus)(nil),      // 1: pb.UploadStatus
-	(*GetChunksRequest)(nil),  // 2: pb.GetChunksRequest
-	(*GetChunksResponse)(nil), // 3: pb.GetChunksResponse
+	(*DownloadRequest)(nil),   // 1: pb.DownloadRequest
+	(*UploadStatus)(nil),      // 2: pb.UploadStatus
+	(*GetChunksRequest)(nil),  // 3: pb.GetChunksRequest
+	(*GetChunksResponse)(nil), // 4: pb.GetChunksResponse
 }
 var file_proto_fileupload_proto_depIdxs = []int32{
 	0, // 0: pb.FileUploadService.UploadFile:input_type -> pb.FileChunk
-	2, // 1: pb.FileUploadService.GetUploadedChunks:input_type -> pb.GetChunksRequest
-	1, // 2: pb.FileUploadService.UploadFile:output_type -> pb.UploadStatus
-	3, // 3: pb.FileUploadService.GetUploadedChunks:output_type -> pb.GetChunksResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	3, // 1: pb.FileUploadService.GetUploadedChunks:input_type -> pb.GetChunksRequest
+	1, // 2: pb.FileUploadService.DownloadFile:input_type -> pb.DownloadRequest
+	2, // 3: pb.FileUploadService.UploadFile:output_type -> pb.UploadStatus
+	4, // 4: pb.FileUploadService.GetUploadedChunks:output_type -> pb.GetChunksResponse
+	0, // 5: pb.FileUploadService.DownloadFile:output_type -> pb.FileChunk
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -322,7 +373,7 @@ func file_proto_fileupload_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_fileupload_proto_rawDesc), len(file_proto_fileupload_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
