@@ -15,7 +15,7 @@ func paths(root, fileID, fileName string) (tmpDir, finalPath, tempFinal string) 
 
 func sanitizeFilename(name string) string {
 	// Remove dangerous characters
-	dangerous := []string{"..", "/", "\\", ":", "*", "?", '"', "<", ">", "|"}
+	dangerous := []string{"..", "/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
 	for _, char := range dangerous {
 		name = strings.ReplaceAll(name, char, "_")
 	}

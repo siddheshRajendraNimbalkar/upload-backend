@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	pb "github.com/siddheshRajendraNimbalkar/upload-backend/pb"
+	pb "upload-backend/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 		return
 	}
 
-	// Connect to gRPC server
+	// Connect to gRPC server  
 	conn, err := grpc.Dial(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
@@ -40,16 +41,18 @@ func main() {
 	defer file.Close()
 
 	fileInfo, _ := file.Stat()
-	chunkSize := int64(2 * 1024 * 1024) // 2 MB chunks
+	chunkSize := int64(4 * 1024 * 1024) // 4 MB chunks
 	totalChunks := (fileInfo.Size() + chunkSize - 1) / chunkSize
 
 	ctx := context.Background()
+	// Add JWT token to context
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer your-jwt-token")
 
 	// Initialize upload with server-generated ID
 	initResp, err := client.InitUpload(ctx, &pb.InitRequest{
 		FileName:    filepath.Base(fileInfo.Name()),
 		TotalChunks: totalChunks,
-		UserId:      uuid.New().String(),
+		UserId:      "user-from-jwt", // This will be overridden by JWT
 	})
 	if err != nil {
 		panic(err)

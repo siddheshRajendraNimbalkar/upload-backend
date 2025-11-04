@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
-	"strconv"
-
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	pb "github.com/siddheshRajendraNimbalkar/upload-backend/pb"
+	pb "upload-backend/pb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -34,10 +33,13 @@ func NewUploadService(redisAddr, tempDir string, db *UploadDB) *UploadService {
 // InitUpload generates server-owned file ID and initializes upload
 func (s *UploadService) InitUpload(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
 	id := uuid.NewString()
-	safe := filepath.Base(req.FileName)
+	safe := sanitizeFilename(filepath.Base(req.FileName))
 	if err := s.db.CreateUpload(id, req.UserId, safe, req.TotalChunks); err != nil {
+		log.Printf("InitUpload error: user_id=%s, file_id=%s, error=%v", req.UserId, id, err)
 		return nil, status.Errorf(codes.Internal, "db insert error: %v", err)
 	}
+
+	log.Printf("InitUpload success: user_id=%s, file_id=%s, file_name=%s, total_chunks=%d", req.UserId, id, safe, req.TotalChunks)
 	return &pb.InitResponse{FileId: id}, nil
 }
 
@@ -60,6 +62,7 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 	// Validate file exists in DB (server must own the ID)
 	rec, err := s.db.GetUploadByID(fileID)
 	if err != nil {
+		log.Printf("UploadFile invalid file_id: file_id=%s, error=%v", fileID, err)
 		return status.Errorf(codes.NotFound, "invalid file_id: %v", err)
 	}
 
@@ -108,6 +111,8 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 	// Cleanup Redis and temp files
 	cleanupChunks(ctx, s.rdb, fileID)
 	os.RemoveAll(tmpDir)
+
+	log.Printf("UploadFile success: file_id=%s, stored_path=%s", fileID, mergedPath)
 
 	// Return success
 	return stream.SendAndClose(&pb.UploadStatus{
@@ -211,15 +216,18 @@ func (s *UploadService) DownloadFile(ctx context.Context, req *pb.DownloadReques
 	// Query metadata from DB
 	err := s.db.pool.QueryRow(ctx, `SELECT stored_path, file_name FROM uploads WHERE file_id=$1`, fileID).Scan(&filePath, &fileName)
 	if err != nil {
+		log.Printf("DownloadFile not found: file_id=%s, error=%v", fileID, err)
 		return nil, status.Errorf(codes.NotFound, "file not found: %v", err)
 	}
 
 	// Read file
 	data, err := os.ReadFile(filePath)
 	if err != nil {
+		log.Printf("DownloadFile read error: file_id=%s, error=%v", fileID, err)
 		return nil, status.Errorf(codes.Internal, "failed to read file: %v", err)
 	}
 
+	log.Printf("DownloadFile success: file_id=%s, size=%d", fileID, len(data))
 	return &pb.DownloadResponse{
 		Content:  data,
 		FileName: fileName,
@@ -231,6 +239,7 @@ func (s *UploadService) GetUploadMetadata(ctx context.Context, req *pb.GetMetada
 	// Fetch DB record
 	rec, err := s.db.GetUploadByID(req.FileId)
 	if err != nil {
+		log.Printf("GetUploadMetadata not found: file_id=%s, error=%v", req.FileId, err)
 		return nil, status.Errorf(codes.NotFound, "upload not found: %v", err)
 	}
 

@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/siddheshRajendraNimbalkar/upload-backend/internal/server"
-	"github.com/siddheshRajendraNimbalkar/upload-backend/pb"
+	"upload-backend/internal/server"
+	pb "upload-backend/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
