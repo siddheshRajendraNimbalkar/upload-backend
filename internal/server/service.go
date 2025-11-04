@@ -169,41 +169,78 @@ func (s *UploadService) mergeChunks(fileID, fileName string) (string, error) {
 	return finalPath, nil
 }
 
-func (s *UploadService) DownloadFile(req *pb.DownloadRequest, stream pb.FileUploadService_DownloadFileServer) error {
-	// Find file path from DB
-	upload, err := s.db.GetUploadByID(req.FileId)
+func (s *UploadService) DownloadFile(ctx context.Context, req *pb.DownloadRequest) (*pb.DownloadResponse, error) {
+	fileID := req.FileId
+	var filePath, fileName string
+
+	// Query metadata from DB
+	err := s.db.pool.QueryRow(ctx, `SELECT stored_path, file_name FROM uploads WHERE file_id=$1`, fileID).Scan(&filePath, &fileName)
 	if err != nil {
-		return status.Errorf(codes.NotFound, "file not found: %v", err)
+		return nil, status.Errorf(codes.NotFound, "file not found: %v", err)
 	}
 
-	filePath := upload.StoredPath
-	file, err := os.Open(filePath)
+	// Read file
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return status.Errorf(codes.Internal, "failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	buffer := make([]byte, 1024*64) // 64KB chunks
-	for {
-		n, err := file.Read(buffer)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return status.Errorf(codes.Internal, "read error: %v", err)
-		}
-
-		// Send chunk to client
-		chunk := &pb.FileChunk{
-			FileId:   req.FileId,
-			FileName: filepath.Base(filePath),
-			Content:  buffer[:n],
-		}
-		if err := stream.Send(chunk); err != nil {
-			return status.Errorf(codes.Internal, "stream send error: %v", err)
-		}
+		return nil, status.Errorf(codes.Internal, "failed to read file: %v", err)
 	}
 
-	fmt.Printf("📤 File %s sent successfully.\n", filePath)
-	return nil
+	return &pb.DownloadResponse{
+		Content:  data,
+		FileName: fileName,
+	}, nil
+}
+
+// GetUploadMetadata returns file metadata from PostgreSQL and uploaded chunk indices from Redis
+func (s *UploadService) GetUploadMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.UploadMetadata, error) {
+    // Fetch DB record
+    rec, err := s.db.GetUploadByID(req.FileId)
+    if err != nil {
+        return nil, status.Errorf(codes.NotFound, "upload not found: %v", err)
+    }
+
+    // Determine size
+    var size int64
+    if rec.Status == "completed" && rec.StoredPath != "" {
+        if fi, err := os.Stat(rec.StoredPath); err == nil {
+            size = fi.Size()
+        }
+    } else {
+        // Sum sizes of chunk files if present
+        uploadDir := filepath.Join(s.tempDir, rec.FileID)
+        entries, err := os.ReadDir(uploadDir)
+        if err == nil {
+            for _, entry := range entries {
+                if entry.IsDir() {
+                    continue
+                }
+                fp := filepath.Join(uploadDir, entry.Name())
+                if fi, err := os.Stat(fp); err == nil {
+                    size += fi.Size()
+                }
+            }
+        }
+    }
+
+    // Get uploaded chunks from Redis
+    pattern := fmt.Sprintf("upload:%s:chunk:*", req.FileId)
+    keys, err := s.rdb.Keys(ctx, pattern).Result()
+    if err != nil {
+        return nil, status.Errorf(codes.Internal, "redis error: %v", err)
+    }
+    var chunks []int64
+    for _, key := range keys {
+        numStr := key[len(fmt.Sprintf("upload:%s:chunk:", req.FileId)):]
+        if num, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+            chunks = append(chunks, num)
+        }
+    }
+
+    return &pb.UploadMetadata{
+        FileId:         rec.FileID,
+        FileName:       rec.FileName,
+        Size:           size,
+        UploadedChunks: chunks,
+        Status:         rec.Status,
+    }, nil
 }

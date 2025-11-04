@@ -2,16 +2,21 @@ syntax = "proto3";
 
 package pb;
 
-option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/proto/pb";
+option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/pb";
 
 import "google/api/annotations.proto";
 
 service FileUploadService {
     rpc UploadFile(stream FileChunk) returns (UploadStatus);
     rpc GetUploadedChunks(GetChunksRequest) returns (GetChunksResponse);
-    rpc DownloadFile(DownloadRequest) returns (stream FileChunk) {
+    rpc DownloadFile(DownloadRequest) returns (DownloadResponse) {
         option (google.api.http) = {
             get: "/v1/files/{file_id}"
+        };
+    }
+    rpc GetUploadMetadata(GetMetadataRequest) returns (UploadMetadata) {
+        option (google.api.http) = {
+            get: "/v1/uploads/{file_id}/metadata"
         };
     }
 }
@@ -29,6 +34,11 @@ message DownloadRequest {
     string file_id = 1;
 }
 
+message DownloadResponse {
+  bytes content = 1;
+  string file_name = 2;
+}
+
 message UploadStatus {
     bool success = 1;
     string message = 2;
@@ -41,4 +51,16 @@ message GetChunksRequest {
 
 message GetChunksResponse {
     repeated int64 uploaded_chunks = 1;
+}
+
+message GetMetadataRequest {
+    string file_id = 1;
+}
+
+message UploadMetadata {
+    string file_id = 1;
+    string file_name = 2;
+    int64 size = 3;
+    repeated int64 uploaded_chunks = 4;
+    string status = 5;
 }
