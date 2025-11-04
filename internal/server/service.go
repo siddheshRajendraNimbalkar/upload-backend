@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	pb "github.com/siddheshRajendraNimbalkar/upload-backend/pb"
 	"google.golang.org/grpc/codes"
@@ -30,9 +31,19 @@ func NewUploadService(redisAddr, tempDir string, db *UploadDB) *UploadService {
 	return &UploadService{rdb: rdb, db: db, tempDir: tempDir}
 }
 
+// InitUpload generates server-owned file ID and initializes upload
+func (s *UploadService) InitUpload(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
+	id := uuid.NewString()
+	safe := filepath.Base(req.FileName)
+	if err := s.db.CreateUpload(id, req.UserId, safe, req.TotalChunks); err != nil {
+		return nil, status.Errorf(codes.Internal, "db insert error: %v", err)
+	}
+	return &pb.InitResponse{FileId: id}, nil
+}
+
 // UploadFile handles streaming upload chunks from client
 func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer) error {
-	ctx := context.Background()
+	ctx := stream.Context()
 
 	// Receive first chunk with metadata
 	firstChunk, err := stream.Recv()
@@ -44,27 +55,32 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 	}
 
 	fileID := firstChunk.FileId
-	userID := firstChunk.UserId
-	fileName := firstChunk.FileName
 	totalChunks := firstChunk.TotalChunks
 
-	// Initialize upload metadata in DB
-	if err := s.db.CreateUpload(fileID, userID, fileName, totalChunks); err != nil {
-		return status.Errorf(codes.Internal, "db insert error: %v", err)
+	// Validate file exists in DB (server must own the ID)
+	rec, err := s.db.GetUploadByID(fileID)
+	if err != nil {
+		return status.Errorf(codes.NotFound, "invalid file_id: %v", err)
 	}
 
-	uploadDir := filepath.Join(s.tempDir, fileID)
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+	tmpDir, _, _ := paths(s.tempDir, fileID, rec.FileName)
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return status.Errorf(codes.Internal, "failed to create temp dir: %v", err)
 	}
 
 	// Save first chunk
-	if err := saveChunk(ctx, s.rdb, uploadDir, fileID, firstChunk); err != nil {
+	if err := s.saveChunk(ctx, tmpDir, fileID, firstChunk, totalChunks); err != nil {
 		return err
 	}
 
 	// Receive remaining chunks
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			break
@@ -73,13 +89,13 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 			return status.Errorf(codes.Internal, "recv chunk error: %v", err)
 		}
 
-		if err := saveChunk(ctx, s.rdb, uploadDir, fileID, chunk); err != nil {
+		if err := s.saveChunk(ctx, tmpDir, fileID, chunk, totalChunks); err != nil {
 			return err
 		}
 	}
 
 	// Merge chunks
-	mergedPath, err := s.mergeChunks(fileID, fileName)
+	mergedPath, err := s.mergeChunks(fileID, rec.FileName, totalChunks)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to merge chunks: %v", err)
 	}
@@ -89,6 +105,10 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 		return status.Errorf(codes.Internal, "failed to update upload status: %v", err)
 	}
 
+	// Cleanup Redis and temp files
+	cleanupChunks(ctx, s.rdb, fileID)
+	os.RemoveAll(tmpDir)
+
 	// Return success
 	return stream.SendAndClose(&pb.UploadStatus{
 		Success:    true,
@@ -97,36 +117,43 @@ func (s *UploadService) UploadFile(stream pb.FileUploadService_UploadFileServer)
 	})
 }
 
-// saveChunk saves a chunk to disk and marks it in Redis
-func saveChunk(ctx context.Context, rdb *redis.Client, uploadDir, fileID string, chunk *pb.FileChunk) error {
-	chunkPath := filepath.Join(uploadDir, fmt.Sprintf("chunk_%d", chunk.ChunkIndex))
+// saveChunk saves a chunk to disk and marks it in Redis with validation
+func (s *UploadService) saveChunk(ctx context.Context, tmpDir, fileID string, chunk *pb.FileChunk, totalChunks int64) error {
+	// Validate chunk index
+	if chunk.ChunkIndex < 0 || chunk.ChunkIndex >= totalChunks {
+		return status.Errorf(codes.InvalidArgument, "invalid chunk index %d", chunk.ChunkIndex)
+	}
+
+	// Check if chunk already exists (idempotency)
+	set, err := listedChunks(ctx, s.rdb, fileID)
+	if err == nil {
+		if _, exists := set[chunk.ChunkIndex]; exists {
+			return nil // Already uploaded, skip
+		}
+	}
+
+	chunkPath := filepath.Join(tmpDir, fmt.Sprintf("chunk_%d", chunk.ChunkIndex))
 	if err := os.WriteFile(chunkPath, chunk.Content, 0644); err != nil {
 		return status.Errorf(codes.Internal, "write chunk error: %v", err)
 	}
 
-	if err := rdb.Set(ctx, fmt.Sprintf("upload:%s:chunk:%d", fileID, chunk.ChunkIndex), true, 0).Err(); err != nil {
+	if err := markChunk(ctx, s.rdb, fileID, chunk.ChunkIndex); err != nil {
 		return status.Errorf(codes.Internal, "redis set error: %v", err)
 	}
 
-	fmt.Printf("✅ Received chunk %d for file %s\n", chunk.ChunkIndex, fileID)
 	return nil
 }
 
 // GetUploadedChunks returns list of uploaded chunk indices from Redis
 func (s *UploadService) GetUploadedChunks(ctx context.Context, req *pb.GetChunksRequest) (*pb.GetChunksResponse, error) {
-	pattern := fmt.Sprintf("upload:%s:chunk:*", req.FileId)
-	keys, err := s.rdb.Keys(ctx, pattern).Result()
+	set, err := listedChunks(ctx, s.rdb, req.FileId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "redis error: %v", err)
 	}
 
 	var chunks []int64
-	for _, key := range keys {
-		numStr := key[len(fmt.Sprintf("upload:%s:chunk:", req.FileId)):]
-		num, err := strconv.ParseInt(numStr, 10, 64)
-		if err == nil {
-			chunks = append(chunks, num)
-		}
+	for chunk := range set {
+		chunks = append(chunks, chunk)
 	}
 
 	return &pb.GetChunksResponse{
@@ -134,38 +161,46 @@ func (s *UploadService) GetUploadedChunks(ctx context.Context, req *pb.GetChunks
 	}, nil
 }
 
-// mergeChunks joins all chunk files into the final file
-func (s *UploadService) mergeChunks(fileID, fileName string) (string, error) {
-	dir := filepath.Join(s.tempDir, fileID)
-	finalDir := filepath.Join(s.tempDir, "files")
-	if err := os.MkdirAll(finalDir, os.ModePerm); err != nil {
+// mergeChunks joins all chunk files into the final file with validation
+func (s *UploadService) mergeChunks(fileID, fileName string, totalChunks int64) (string, error) {
+	tmpDir, finalPath, tempFinal := paths(s.tempDir, fileID, fileName)
+
+	// Ensure all chunks exist before merging
+	for i := int64(0); i < totalChunks; i++ {
+		p := filepath.Join(tmpDir, fmt.Sprintf("chunk_%d", i))
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("missing chunk %d", i)
+		}
+	}
+
+	// Create final directory
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0755); err != nil {
 		return "", err
 	}
 
-	finalPath := filepath.Join(finalDir, fmt.Sprintf("%s_%s", fileID, fileName))
-	out, err := os.Create(finalPath)
+	// Write to temp file first (atomic)
+	out, err := os.Create(tempFinal)
 	if err != nil {
 		return "", err
 	}
 	defer out.Close()
 
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return "", err
-	}
-
-	for i := 0; i < len(files); i++ {
-		chunkPath := filepath.Join(dir, fmt.Sprintf("chunk_%d", i))
-		data, err := os.ReadFile(chunkPath)
+	// Merge chunks in order
+	for i := int64(0); i < totalChunks; i++ {
+		f, err := os.Open(filepath.Join(tmpDir, fmt.Sprintf("chunk_%d", i)))
 		if err != nil {
 			return "", err
 		}
-		if _, err := out.Write(data); err != nil {
-			return "", err
-		}
+		io.Copy(out, f)
+		f.Close()
 	}
 
-	fmt.Printf("🎉 Merged file saved at: %s\n", finalPath)
+	out.Close()
+	// Atomic rename
+	if err := os.Rename(tempFinal, finalPath); err != nil {
+		return "", err
+	}
+
 	return finalPath, nil
 }
 
@@ -193,54 +228,50 @@ func (s *UploadService) DownloadFile(ctx context.Context, req *pb.DownloadReques
 
 // GetUploadMetadata returns file metadata from PostgreSQL and uploaded chunk indices from Redis
 func (s *UploadService) GetUploadMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.UploadMetadata, error) {
-    // Fetch DB record
-    rec, err := s.db.GetUploadByID(req.FileId)
-    if err != nil {
-        return nil, status.Errorf(codes.NotFound, "upload not found: %v", err)
-    }
+	// Fetch DB record
+	rec, err := s.db.GetUploadByID(req.FileId)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "upload not found: %v", err)
+	}
 
-    // Determine size
-    var size int64
-    if rec.Status == "completed" && rec.StoredPath != "" {
-        if fi, err := os.Stat(rec.StoredPath); err == nil {
-            size = fi.Size()
-        }
-    } else {
-        // Sum sizes of chunk files if present
-        uploadDir := filepath.Join(s.tempDir, rec.FileID)
-        entries, err := os.ReadDir(uploadDir)
-        if err == nil {
-            for _, entry := range entries {
-                if entry.IsDir() {
-                    continue
-                }
-                fp := filepath.Join(uploadDir, entry.Name())
-                if fi, err := os.Stat(fp); err == nil {
-                    size += fi.Size()
-                }
-            }
-        }
-    }
+	// Determine size
+	var size int64
+	if rec.Status == "completed" && rec.StoredPath != "" {
+		if fi, err := os.Stat(rec.StoredPath); err == nil {
+			size = fi.Size()
+		}
+	} else {
+		// Sum sizes of chunk files if present
+		tmpDir, _, _ := paths(s.tempDir, rec.FileID, rec.FileName)
+		entries, err := os.ReadDir(tmpDir)
+		if err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				fp := filepath.Join(tmpDir, entry.Name())
+				if fi, err := os.Stat(fp); err == nil {
+					size += fi.Size()
+				}
+			}
+		}
+	}
 
-    // Get uploaded chunks from Redis
-    pattern := fmt.Sprintf("upload:%s:chunk:*", req.FileId)
-    keys, err := s.rdb.Keys(ctx, pattern).Result()
-    if err != nil {
-        return nil, status.Errorf(codes.Internal, "redis error: %v", err)
-    }
-    var chunks []int64
-    for _, key := range keys {
-        numStr := key[len(fmt.Sprintf("upload:%s:chunk:", req.FileId)):]
-        if num, err := strconv.ParseInt(numStr, 10, 64); err == nil {
-            chunks = append(chunks, num)
-        }
-    }
+	// Get uploaded chunks from Redis using sets
+	set, err := listedChunks(ctx, s.rdb, req.FileId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "redis error: %v", err)
+	}
+	var chunks []int64
+	for chunk := range set {
+		chunks = append(chunks, chunk)
+	}
 
-    return &pb.UploadMetadata{
-        FileId:         rec.FileID,
-        FileName:       rec.FileName,
-        Size:           size,
-        UploadedChunks: chunks,
-        Status:         rec.Status,
-    }, nil
+	return &pb.UploadMetadata{
+		FileId:         rec.FileID,
+		FileName:       rec.FileName,
+		Size:           size,
+		UploadedChunks: chunks,
+		Status:         rec.Status,
+	}, nil
 }

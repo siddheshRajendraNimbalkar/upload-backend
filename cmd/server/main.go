@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/siddheshRajendraNimbalkar/upload-backend/internal/server"
 	"github.com/siddheshRajendraNimbalkar/upload-backend/pb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -49,7 +51,19 @@ func main() {
 		log.Fatalf("❌ Failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	// Configure TLS if certificates are provided
+	var grpcServer *grpc.Server
+	if os.Getenv("TLS_CERT") != "" {
+		creds, err := credentials.NewServerTLSFromFile(os.Getenv("TLS_CERT"), os.Getenv("TLS_KEY"))
+		if err != nil {
+			log.Fatalf("❌ Failed to load TLS credentials: %v", err)
+		}
+		grpcServer = grpc.NewServer(grpc.Creds(creds))
+		fmt.Println("✅ TLS enabled")
+	} else {
+		grpcServer = grpc.NewServer()
+		fmt.Println("⚠️  Running without TLS")
+	}
 
 	// Initialize the upload service
 	uploadService := server.NewUploadService(redisAddr, tempDir, db)

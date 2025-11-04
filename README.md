@@ -1,13 +1,14 @@
 ## Upload Backend (gRPC + gRPC-Gateway)
 
-Chunked file uploads with Redis for chunk tracking, PostgreSQL for metadata, and a REST gateway that exposes select gRPC methods.
+Secure chunked file uploads with Redis for chunk tracking, PostgreSQL for metadata, and a REST gateway that exposes select gRPC methods.
 
 ### Architecture
-- gRPC server: handles streaming uploads, metadata, and download
-- Redis: marks uploaded chunk indexes per file during upload
-- PostgreSQL: stores upload records (file_id, file_name, status, stored_path, total_chunks)
-- Storage: merged files saved under `./storage/files`, in-progress chunks under `./storage/<file_id>`
+- gRPC server: handles streaming uploads, metadata, and download with server-generated file IDs
+- Redis: tracks uploaded chunk indexes using Sets (not KEYS) with TTL
+- PostgreSQL: stores upload records with constraints and indices
+- Storage: merged files saved under `./storage/files` with sanitized names, temp chunks under `./storage/tmp/<file_id>`
 - gRPC-Gateway: exposes REST for download and metadata
+- Security: TLS support, path sanitization, atomic operations
 
 ### Requirements
 - Go 1.21+
@@ -81,11 +82,19 @@ go run ./cmd/gateway
 
 ### Usage
 
-- Upload via gRPC streaming (example client):
+**Upload Process (2-step):**
 
+1. Initialize upload (gets server-generated file ID):
+```
+rpc InitUpload(InitRequest) returns (InitResponse)
+```
+
+2. Upload via gRPC streaming (example client):
 ```
 go run ./cmd/client --file=/absolute/path/to/file
 ```
+
+**Client now uses 2MB chunks (vs 1KB) for better performance.**
 
 - Download file (REST):
 
@@ -129,10 +138,22 @@ Defaults are set in `cmd/server/main.go`:
 - Temp/storage dir: `./storage`
 - gRPC: `:50051`
 - Postgres DSN: see above
+- TLS: Set `TLS_CERT` and `TLS_KEY` environment variables to enable
 
 Adjust as needed for your environment.
 
+### Security Features
+- **Server-owned file IDs**: InitUpload RPC generates UUIDs server-side
+- **Path sanitization**: Filenames cleaned with `filepath.Base()` and dangerous chars removed
+- **Redis Sets**: Uses `SADD`/`SMEMBERS` instead of `KEYS` for O(1) operations with 24h TTL
+- **Atomic merging**: Index-driven merge with gap detection and atomic rename
+- **Validation**: Chunk bounds checking and idempotency
+- **TLS support**: Optional via environment variables
+- **File permissions**: 0755 for dirs, 0644 for files
+
 ### Notes
-- During upload, chunk presence is tracked in Redis under keys `upload:{file_id}:chunk:{index}`
-- On completion, chunks are merged into `./storage/files/{file_id}_{file_name}` and DB status is set to `completed`
+- During upload, chunk presence is tracked in Redis Sets: `upload:{file_id}:chunks`
+- On completion, chunks are merged into `./storage/files/{file_id}_{sanitized_name}` atomically
+- Temp files and Redis keys are cleaned up automatically
 - The REST gateway encodes 64-bit integers as strings to be safe for JavaScript clients
+- Database includes constraints: `status IN ('in_progress','completed','failed')`

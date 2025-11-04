@@ -7,6 +7,7 @@ option go_package = "github.com/siddheshRajendraNimbalkar/upload-backend/pb";
 import "google/api/annotations.proto";
 
 service FileUploadService {
+    rpc InitUpload(InitRequest) returns (InitResponse);
     rpc UploadFile(stream FileChunk) returns (UploadStatus);
     rpc GetUploadedChunks(GetChunksRequest) returns (GetChunksResponse);
     rpc DownloadFile(DownloadRequest) returns (DownloadResponse) {
@@ -63,4 +64,14 @@ message UploadMetadata {
     int64 size = 3;
     repeated int64 uploaded_chunks = 4;
     string status = 5;
+}
+
+message InitRequest {
+    string file_name = 1;
+    int64 total_chunks = 2;
+    string user_id = 3;
+}
+
+message InitResponse {
+    string file_id = 1;
 }

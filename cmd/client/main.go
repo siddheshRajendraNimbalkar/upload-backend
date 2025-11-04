@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	pb "github.com/siddheshRajendraNimbalkar/upload-backend/pb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -23,7 +25,7 @@ func main() {
 	}
 
 	// Connect to gRPC server
-	conn, err := grpc.Dial(*serverAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(*serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -38,11 +40,22 @@ func main() {
 	defer file.Close()
 
 	fileInfo, _ := file.Stat()
-	totalChunks := fileInfo.Size()/1024 + 1 // 1 KB chunks
+	chunkSize := int64(2 * 1024 * 1024) // 2 MB chunks
+	totalChunks := (fileInfo.Size() + chunkSize - 1) / chunkSize
 
-	fileID := uuid.New().String()
-	fmt.Println("Uploading file with ID:", fileID)
 	ctx := context.Background()
+
+	// Initialize upload with server-generated ID
+	initResp, err := client.InitUpload(ctx, &pb.InitRequest{
+		FileName:    filepath.Base(fileInfo.Name()),
+		TotalChunks: totalChunks,
+		UserId:      uuid.New().String(),
+	})
+	if err != nil {
+		panic(err)
+	}
+	fileID := initResp.FileId
+	fmt.Println("Uploading file with ID:", fileID)
 
 	// Check already uploaded chunks
 	resp, err := client.GetUploadedChunks(ctx, &pb.GetChunksRequest{FileId: fileID})
@@ -60,7 +73,6 @@ func main() {
 		panic(err)
 	}
 
-	chunkSize := int64(1024) // 1 KB
 	var chunkIndex int64 = 0
 	buf := make([]byte, chunkSize)
 
