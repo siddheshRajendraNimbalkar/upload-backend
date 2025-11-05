@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 	"upload-backend/internal/server"
@@ -14,29 +15,62 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-func main() {
-	// -------------------------------
-	// Configuration
-	// -------------------------------
-	grpcPort := 50051
-	redisAddr := "localhost:6379"
-	tempDir := "storage"
-	dbConnStr := "postgresql://upload:upload123@localhost:5432/upload_db?sslmode=disable"
+type cfg struct {
+	GRPCPort    string
+	PostgresDSN string
+	RedisAddr   string
+	JWTSecret   string
+	TLSCert     string
+	TLSKey      string
+	StorageDir  string
+}
 
-	// -------------------------------
-	// Connect to PostgreSQL
-	// -------------------------------
-	db, err := server.NewUploadDB(dbConnStr)
+func mustEnv(k string, optional bool) string {
+	v := os.Getenv(k)
+	if v == "" && !optional {
+		log.Fatalf("missing required env %s", k)
+	}
+	return v
+}
+
+func defaultIfEmpty(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
+}
+
+func loadCfg() cfg {
+	return cfg{
+		GRPCPort:    defaultIfEmpty(os.Getenv("GRPC_PORT"), "50051"),
+		PostgresDSN: mustEnv("POSTGRES_DSN", false),
+		RedisAddr:   defaultIfEmpty(os.Getenv("REDIS_ADDR"), "localhost:6379"),
+		JWTSecret:   mustEnv("JWT_SECRET", os.Getenv("ALLOW_INSECURE") == "true"),
+		TLSCert:     os.Getenv("TLS_CERT"),
+		TLSKey:      os.Getenv("TLS_KEY"),
+		StorageDir:  defaultIfEmpty(os.Getenv("STORAGE_DIR"), "./storage"),
+	}
+}
+
+func main() {
+	// Load and validate configuration
+	config := loadCfg()
+	
+	grpcPort, err := strconv.Atoi(config.GRPCPort)
 	if err != nil {
-		panic(err)
+		log.Fatalf("invalid GRPC_PORT: %v", err)
+	}
+
+	// Connect to PostgreSQL
+	db, err := server.NewUploadDB(config.PostgresDSN)
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to PostgreSQL: %v", err)
 	}
 	fmt.Println("✅ Connected to PostgreSQL")
 
-	// -------------------------------
 	// Connect to Redis
-	// -------------------------------
 	rdb := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
+		Addr: config.RedisAddr,
 	})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("❌ Failed to connect to Redis: %v", err)
@@ -53,8 +87,8 @@ func main() {
 
 	// Configure TLS if certificates are provided
 	var grpcServer *grpc.Server
-	if os.Getenv("TLS_CERT") != "" {
-		creds, err := credentials.NewServerTLSFromFile(os.Getenv("TLS_CERT"), os.Getenv("TLS_KEY"))
+	if config.TLSCert != "" {
+		creds, err := credentials.NewServerTLSFromFile(config.TLSCert, config.TLSKey)
 		if err != nil {
 			log.Fatalf("❌ Failed to load TLS credentials: %v", err)
 		}
@@ -66,7 +100,7 @@ func main() {
 	}
 
 	// Initialize the upload service
-	uploadService := server.NewUploadService(redisAddr, tempDir, db)
+	uploadService := server.NewUploadService(config.RedisAddr, config.StorageDir, db)
 	pb.RegisterFileUploadServiceServer(grpcServer, uploadService)
 
 	fmt.Printf("🚀 gRPC server running on port %d\n", grpcPort)
