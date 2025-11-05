@@ -61,6 +61,15 @@ func main() {
 		log.Fatalf("invalid GRPC_PORT: %v", err)
 	}
 
+	// Create storage directories
+	if err := os.MkdirAll(config.StorageDir+"/files", 0755); err != nil {
+		log.Fatalf("❌ Failed to create storage directory: %v", err)
+	}
+	if err := os.MkdirAll(config.StorageDir+"/tmp", 0755); err != nil {
+		log.Fatalf("❌ Failed to create temp directory: %v", err)
+	}
+	fmt.Printf("✅ Storage directories ready: %s\n", config.StorageDir)
+
 	// Connect to PostgreSQL
 	db, err := server.NewUploadDB(config.PostgresDSN)
 	if err != nil {
