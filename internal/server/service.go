@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	pb "upload-backend/pb"
+	"upload-backend/pb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -282,5 +282,49 @@ func (s *UploadService) GetUploadMetadata(ctx context.Context, req *pb.GetMetada
 		Size:           size,
 		UploadedChunks: chunks,
 		Status:         rec.Status,
+	}, nil
+}
+
+// DeleteFile removes a file and its metadata
+func (s *UploadService) DeleteFile(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	fileID := req.FileId
+
+	// Get file info from database
+	rec, err := s.db.GetUploadByID(fileID)
+	if err != nil {
+		log.Printf("DeleteFile not found: file_id=%s, error=%v", fileID, err)
+		return &pb.DeleteResponse{
+			Success: false,
+			Message: "File not found",
+		}, nil
+	}
+
+	// Delete physical file if it exists
+	if rec.StoredPath != "" {
+		if err := os.Remove(rec.StoredPath); err != nil {
+			log.Printf("DeleteFile remove error: file_id=%s, path=%s, error=%v", fileID, rec.StoredPath, err)
+		}
+	}
+
+	// Delete temp directory if it exists
+	tmpDir, _, _ := paths(s.tempDir, fileID, rec.FileName)
+	os.RemoveAll(tmpDir)
+
+	// Clean up Redis keys
+	cleanupChunks(ctx, s.rdb, fileID)
+
+	// Delete from database
+	if err := s.db.DeleteUpload(fileID); err != nil {
+		log.Printf("DeleteFile db error: file_id=%s, error=%v", fileID, err)
+		return &pb.DeleteResponse{
+			Success: false,
+			Message: "Database deletion failed",
+		}, nil
+	}
+
+	log.Printf("DeleteFile success: file_id=%s", fileID)
+	return &pb.DeleteResponse{
+		Success: true,
+		Message: "File deleted successfully",
 	}, nil
 }

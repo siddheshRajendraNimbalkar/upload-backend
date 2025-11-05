@@ -1,0 +1,18 @@
+✅ Connected to PostgreSQL
+✅ Connected to Redis
+⚠️  Running without TLS
+🚀 gRPC server running on port 50051
+2025/11/04 19:30:32 DeleteFile not found: file_id=7271bcd6-0c13-4d16-9f9b-6705225f72b5, error=no rows in result set
+2025/11/04 19:30:34 DeleteFile not found: file_id=aa61dd19-4270-40b2-a275-7488a918e754, error=no rows in result set
+2025/11/04 19:30:35 DeleteFile not found: file_id=afc81647-c97b-4404-acc6-b766e3ddd868, error=no rows in result set
+2025/11/04 19:30:35 DeleteFile not found: file_id=b169d03f-0298-4f61-b38a-6d8140d2f77b, error=no rows in result set
+2025/11/04 19:30:35 DeleteFile not found: file_id=b4e1716e-bb73-480c-b0c8-4e127282f376, error=no rows in result set
+2025/11/04 19:30:35 DeleteFile not found: file_id=b8b76bed-a7d1-48d6-850e-d45542f35198, error=no rows in result set
+2025/11/04 19:30:37 DeleteFile not found: file_id=da2e97c7-6507-4051-83ec-b8b23aa5ddb6, error=no rows in result set
+2025/11/04 19:32:12 DeleteFile not found: file_id=7271bcd6-0c13-4d16-9f9b-6705225f72b5, error=no rows in result set
+2025/11/04 19:32:12 DeleteFile not found: file_id=aa61dd19-4270-40b2-a275-7488a918e754, error=no rows in result set
+2025/11/04 19:32:13 DeleteFile not found: file_id=afc81647-c97b-4404-acc6-b766e3ddd868, error=no rows in result set
+2025/11/04 19:32:13 DeleteFile not found: file_id=b169d03f-0298-4f61-b38a-6d8140d2f77b, error=no rows in result set
+2025/11/04 19:32:13 DeleteFile not found: file_id=b4e1716e-bb73-480c-b0c8-4e127282f376, error=no rows in result set
+2025/11/04 19:32:13 DeleteFile not found: file_id=b8b76bed-a7d1-48d6-850e-d45542f35198, error=no rows in result set
+2025/11/04 19:40:16 DeleteFile not found: file_id=a8043d85-04be-4077-b485-25a113b7f180, error=no rows in result set

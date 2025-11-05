@@ -20,6 +20,11 @@ service FileUploadService {
             get: "/v1/uploads/{file_id}/metadata"
         };
     }
+    rpc DeleteFile(DeleteRequest) returns (DeleteResponse) {
+        option (google.api.http) = {
+            delete: "/v1/files/{file_id}"
+        };
+    }
 }
 
 message FileChunk {
@@ -74,4 +79,13 @@ message InitRequest {
 
 message InitResponse {
     string file_id = 1;
+}
+
+message DeleteRequest {
+    string file_id = 1;
+}
+
+message DeleteResponse {
+    bool success = 1;
+    string message = 2;
 }

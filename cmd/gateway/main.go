@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	pb "github.com/siddheshRajendraNimbalkar/upload-backend/pb"
+	"upload-backend/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

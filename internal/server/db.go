@@ -59,3 +59,12 @@ func (db *UploadDB) GetUploadByID(fileID string) (*UploadRecord, error) {
 	}
 	return &rec, nil
 }
+
+// DeleteUpload removes an upload record from the database
+func (db *UploadDB) DeleteUpload(fileID string) error {
+	_, err := db.pool.Exec(context.Background(),
+		`DELETE FROM uploads WHERE file_id=$1`,
+		fileID,
+	)
+	return err
+}
